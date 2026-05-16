@@ -13,10 +13,6 @@ DEADZONE = 0.25
 LOOP_SECONDS = 0.05
 DEGREES_PER_TICK = 2
 GRIPPER_STEP = 3
-DEBUG_WINDOW_SIZE = (520, 260)
-DEBUG_BACKGROUND = (22, 24, 28)
-DEBUG_TEXT = (235, 238, 242)
-DEBUG_ACCENT = (84, 170, 255)
 
 
 def clamp_joint(joint: str, angle: int) -> int:
@@ -102,41 +98,9 @@ def log_position(position: ArmPosition) -> None:
     )
 
 
-def render_debug_window(
-    screen: pygame.Surface,
-    font: pygame.font.Font,
-    position: ArmPosition,
-) -> None:
-    screen.fill(DEBUG_BACKGROUND)
-
-    lines = [
-        "Robotic Arm Joystick Control",
-        "",
-        f"Base rotation: {position.base_rotation}",
-        f"Base lift:     {position.base_lift}",
-        f"Elbow:         {position.elbow}",
-        f"Wrist:         {position.wrist}",
-        f"Gripper:       {position.gripper}",
-        "",
-        "Close this window or press Ctrl+C to stop.",
-    ]
-
-    y = 20
-    for index, line in enumerate(lines):
-        color = DEBUG_ACCENT if index == 0 else DEBUG_TEXT
-        text = font.render(line, True, color)
-        screen.blit(text, (20, y))
-        y += 26
-
-    pygame.display.flip()
-
-
 def main() -> None:
     pygame.init()
     pygame.joystick.init()
-    pygame.display.set_caption("Robotic Arm Debug")
-    screen = pygame.display.set_mode(DEBUG_WINDOW_SIZE)
-    font = pygame.font.Font(None, 28)
 
     joystick = wait_for_joystick()
     position = ArmPosition(**HOME_POSITION)
@@ -150,20 +114,18 @@ def main() -> None:
     try:
         with RoboticArmController() as arm:
             arm.move_to(position)
-            render_debug_window(screen, font, position)
+            log_position(position)
 
             while True:
-                for event in pygame.event.get():
-                    if event.type == pygame.QUIT:
-                        raise KeyboardInterrupt
+                pygame.event.pump()
 
                 next_position = position_from_joystick(joystick, position)
 
                 if next_position != position:
                     arm.move_to(next_position)
                     position = next_position
+                    log_position(position)
 
-                render_debug_window(screen, font, position)
                 time.sleep(LOOP_SECONDS)
     except KeyboardInterrupt:
         print("\nJoystick control stopped.")
