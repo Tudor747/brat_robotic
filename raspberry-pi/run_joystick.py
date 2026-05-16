@@ -13,6 +13,9 @@ DEADZONE = 0.25
 LOOP_SECONDS = 0.05
 DEGREES_PER_TICK = 2
 GRIPPER_STEP = 3
+DEBUG_WINDOW_SIZE = (320, 200)
+FONT_SIZE = 22
+LINE_HEIGHT = 26
 
 
 def clamp_joint(joint: str, angle: int) -> int:
@@ -91,9 +94,31 @@ def wait_for_joystick() -> pygame.joystick.Joystick:
     return joystick
 
 
+def render_debug_window(screen: pygame.Surface, font: pygame.font.Font, position: ArmPosition) -> None:
+    screen.fill((15, 15, 15))
+
+    labels = [
+        f"Base rotation: {position.base_rotation}",
+        f"Base lift:     {position.base_lift}",
+        f"Elbow:         {position.elbow}",
+        f"Wrist:         {position.wrist}",
+        f"Gripper:       {position.gripper}",
+    ]
+
+    for index, text in enumerate(labels):
+        rendered = font.render(text, True, (240, 240, 240))
+        screen.blit(rendered, (10, 10 + index * LINE_HEIGHT))
+
+    pygame.display.flip()
+
+
 def main() -> None:
     pygame.init()
     pygame.joystick.init()
+
+    screen = pygame.display.set_mode(DEBUG_WINDOW_SIZE)
+    pygame.display.set_caption("Arm Position Debug")
+    font = pygame.font.Font(None, FONT_SIZE)
 
     joystick = wait_for_joystick()
     position = ArmPosition(**HOME_POSITION)
@@ -107,6 +132,7 @@ def main() -> None:
     try:
         with RoboticArmController() as arm:
             arm.move_to(position)
+            render_debug_window(screen, font, position)
 
             while True:
                 pygame.event.pump()
@@ -115,6 +141,7 @@ def main() -> None:
                 if next_position != position:
                     arm.move_to(next_position)
                     position = next_position
+                    render_debug_window(screen, font, position)
 
                 time.sleep(LOOP_SECONDS)
     except KeyboardInterrupt:
