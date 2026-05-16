@@ -14,6 +14,11 @@ LOOP_SECONDS = 0.05
 DEGREES_PER_TICK = 2
 GRIPPER_STEP = 3
 
+LEFT_X_AXIS = 0
+LEFT_Y_AXIS = 1
+RIGHT_X_AXIS = 3
+RIGHT_Y_AXIS = 4
+
 
 def clamp_joint(joint: str, angle: int) -> int:
     minimum, maximum = ANGLE_LIMITS[joint]
@@ -41,10 +46,10 @@ def position_from_joystick(
     joystick: pygame.joystick.Joystick,
     position: ArmPosition,
 ) -> ArmPosition:
-    left_x = axis_value(joystick, 0)
-    left_y = axis_value(joystick, 1)
-    right_x = axis_value(joystick, 2)
-    right_y = axis_value(joystick, 3)
+    left_x = axis_value(joystick, LEFT_X_AXIS)
+    left_y = axis_value(joystick, LEFT_Y_AXIS)
+    right_x = axis_value(joystick, RIGHT_X_AXIS)
+    right_y = axis_value(joystick, RIGHT_Y_AXIS)
 
     next_position = position
     next_position = move_position(
@@ -88,6 +93,7 @@ def wait_for_joystick() -> pygame.joystick.Joystick:
     joystick = pygame.joystick.Joystick(0)
     joystick.init()
     print(f"Using joystick: {joystick.get_name()}")
+    print(f"Axes: {joystick.get_numaxes()}, buttons: {joystick.get_numbuttons()}")
     return joystick
 
 
@@ -98,11 +104,26 @@ def log_position(position: ArmPosition) -> None:
     )
 
 
+def log_axis_snapshot(joystick: pygame.joystick.Joystick) -> None:
+    pygame.event.pump()
+    values = [
+        f"{axis}={joystick.get_axis(axis):+.2f}"
+        for axis in range(joystick.get_numaxes())
+    ]
+    print("Axis snapshot -> " + ", ".join(values))
+    print(
+        "Mapping -> "
+        f"left_x={LEFT_X_AXIS}, left_y={LEFT_Y_AXIS}, "
+        f"right_x/wrist={RIGHT_X_AXIS}, right_y/elbow={RIGHT_Y_AXIS}"
+    )
+
+
 def main() -> None:
     pygame.init()
     pygame.joystick.init()
 
     joystick = wait_for_joystick()
+    log_axis_snapshot(joystick)
     position = ArmPosition(**HOME_POSITION)
 
     print("Joystick control started. Press Ctrl+C to stop.")
