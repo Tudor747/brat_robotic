@@ -135,14 +135,17 @@ def main() -> None:
             render_debug_window(screen, font, position)
 
             while True:
-                pygame.event.pump()
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        raise KeyboardInterrupt
+
                 next_position = position_from_joystick(joystick, position)
 
                 if next_position != position:
                     arm.move_to(next_position)
                     position = next_position
-                    render_debug_window(screen, font, position)
 
+                render_debug_window(screen, font, position)
                 time.sleep(LOOP_SECONDS)
     except KeyboardInterrupt:
         print("\nJoystick control stopped.")
