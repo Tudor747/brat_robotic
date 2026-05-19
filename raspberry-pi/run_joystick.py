@@ -20,6 +20,7 @@ from kinematics import CartesianPosition, cartesian_to_arm_position
 DEADZONE = 0.25
 LOOP_SECONDS = 0.05
 GRIPPER_STEP = 3
+HOME_STEP_MM = 6.0
 
 
 def clamp_joint(joint: str, angle: int) -> int:
@@ -41,6 +42,12 @@ def axis_value(joystick: pygame.joystick.Joystick, axis: int) -> float:
 
 def button_pressed(joystick: pygame.joystick.Joystick, button: int) -> bool:
     return button < joystick.get_numbuttons() and joystick.get_button(button) == 1
+
+
+def step_toward(current: float, target: float, step: float) -> float:
+    if abs(target - current) <= step:
+        return target
+    return current + step if target > current else current - step
 
 
 def move_cartesian_position(
@@ -69,6 +76,15 @@ def move_cartesian_position(
     )
 
 
+def move_cartesian_toward_home(position: CartesianPosition) -> CartesianPosition:
+    home = CartesianPosition(**CARTESIAN_HOME)
+    return CartesianPosition(
+        x=step_toward(position.x, home.x, HOME_STEP_MM),
+        y=step_toward(position.y, home.y, HOME_STEP_MM),
+        z=step_toward(position.z, home.z, HOME_STEP_MM),
+    )
+
+
 def position_from_joystick(
     joystick: pygame.joystick.Joystick,
     cartesian_position: CartesianPosition,
@@ -93,7 +109,7 @@ def position_from_joystick(
         gripper = clamp_joint("gripper", gripper + GRIPPER_STEP)
 
     if button_pressed(joystick, 0):
-        next_cartesian_position = CartesianPosition(**CARTESIAN_HOME)
+        next_cartesian_position = move_cartesian_toward_home(cartesian_position)
         gripper = HOME_POSITION["gripper"]
 
     next_arm_position = cartesian_to_arm_position(

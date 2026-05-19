@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Robotic Arm XYZ Preview</title>
+  <style>
+    :root {
+      font-family: Arial, sans-serif;
+      background: #f4f6fa;
+      color: #172033;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: 24px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    button {
+      border: 1px solid #b8c3d8;
+      background: #ffffff;
+      color: #172033;
+      border-radius: 6px;
+      padding: 8px 12px;
+      cursor: pointer;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+
+    section {
+      min-width: 0;
+    }
+
+    h2 {
+      font-size: 16px;
+      margin: 0 0 8px;
+    }
+
+    canvas {
+      width: 100%;
+      aspect-ratio: 4 / 3;
+      display: block;
+      background: #ffffff;
+      border: 1px solid #d7deec;
+      border-radius: 8px;
+    }
+
+    .readout {
+      margin-top: 12px;
+      padding: 12px;
+      background: #ffffff;
+      border: 1px solid #d7deec;
+      border-radius: 8px;
+      font-family: Consolas, monospace;
+      font-size: 14px;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 820px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Robotic Arm XYZ Preview</h1>
+    <div class="toolbar">
+      <button id="toggle">Pause</button>
+      <span>Top view shows base/Y sweep. Side view shows X/Z reach.</span>
+    </div>
+
+    <div class="grid">
+      <section>
+        <h2>Top View: Base Rotation / Y Axis</h2>
+        <canvas id="top" width="560" height="420"></canvas>
+      </section>
+      <section>
+        <h2>Side View: Shoulder + Elbow / X-Z Axes</h2>
+        <canvas id="side" width="560" height="420"></canvas>
+      </section>
+    </div>
+
+    <div class="readout" id="readout"></div>
+  </main>
+
+  <script>
+    const geometry = {
+      shoulderHeight: 139,
+      upperArm: 120,
+      forearm: 120,
+      wristToGripperTip: 107,
+    };
+
+    const limits = {
+      baseMin: 30,
+      baseCenter: 90,
+      baseMax: 150,
+      shoulderMin: 30,
+      shoulderMax: 150,
+      elbowMin: 20,
+      elbowMax: 160,
+    };
+
+    const servo = {
+      baseRotationOffset: 90,
+      baseRotationDirection: 1,
+      baseLiftOffset: 120,
+      baseLiftDirection: -1,
+      elbowOffset: 45,
+      elbowDirection: 1,
+    };
+
+    const cartesianHome = { x: 300, y: 0, z: 139 };
+    const topCanvas = document.getElementById("top");
+    const sideCanvas = document.getElementById("side");
+    const topCtx = topCanvas.getContext("2d");
+    const sideCtx = sideCanvas.getContext("2d");
+    const readout = document.getElementById("readout");
+    const toggle = document.getElementById("toggle");
+    let running = true;
+
+    toggle.addEventListener("click", () => {
+      running = !running;
+      toggle.textContent = running ? "Pause" : "Play";
+    });
+
+    function clamp(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function degrees(radians) {
+      return radians * 180 / Math.PI;
+    }
+
+    function radians(deg) {
+      return deg * Math.PI / 180;
+    }
+
+    function solveIk(target) {
+      const upper = geometry.upperArm;
+      const lower = geometry.forearm + geometry.wristToGripperTip;
+      const horizontal = Math.hypot(target.x, target.y);
+      const vertical = target.z - geometry.shoulderHeight;
+      const reach = Math.hypot(horizontal, vertical);
+      const safeReach = clamp(reach, Math.abs(upper - lower) + 1, upper + lower - 1);
+
+      const baseMath = degrees(Math.atan2(target.y, target.x));
+      const baseServo = servo.baseRotationOffset + servo.baseRotationDirection * baseMath;
+
+      const targetAngle = Math.atan2(vertical, horizontal);
+      const shoulderCos = clamp(
+        (upper * upper + safeReach * safeReach - lower * lower) / (2 * upper * safeReach),
+        -1,
+        1
+      );
+      const elbowCos = clamp(
+        (upper * upper + lower * lower - safeReach * safeReach) / (2 * upper * lower),
+        -1,
+        1
+      );
+
+      const shoulderAngle = targetAngle + Math.acos(shoulderCos);
+      const elbowAngle = Math.PI - Math.acos(elbowCos);
+      const shoulderServo = servo.baseLiftOffset + servo.baseLiftDirection * degrees(shoulderAngle);
+      const elbowServo = servo.elbowOffset + servo.elbowDirection * degrees(elbowAngle);
+
+      return {
+        horizontal,
+        vertical,
+        reach,
+        safeReach,
+        baseMath,
+        baseServo: Math.round(clamp(baseServo, limits.baseMin, limits.baseMax)),
+        shoulderAngle,
+        elbowAngle,
+        shoulderServo: Math.round(clamp(shoulderServo, limits.shoulderMin, limits.shoulderMax)),
+        elbowServo: Math.round(clamp(elbowServo, limits.elbowMin, limits.elbowMax)),
+        baseLimit: baseServo <= limits.baseMin || baseServo >= limits.baseMax,
+        shoulderLimit: shoulderServo <= limits.shoulderMin || shoulderServo >= limits.shoulderMax,
+        elbowLimit: elbowServo <= limits.elbowMin || elbowServo >= limits.elbowMax,
+      };
+    }
+
+    function drawGrid(ctx, width, height) {
+      ctx.clearRect(0, 0, width, height);
+      ctx.strokeStyle = "#dbe2ef";
+      ctx.lineWidth = 1;
+      for (let x = 40; x < width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 30);
+        ctx.lineTo(x, height - 30);
+        ctx.stroke();
+      }
+      for (let y = 40; y < height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(30, y);
+        ctx.lineTo(width - 30, y);
+        ctx.stroke();
+      }
+    }
+
+    function drawTopView(target, ik) {
+      const ctx = topCtx;
+      const width = topCanvas.width;
+      const height = topCanvas.height;
+      const origin = { x: width / 2, y: height - 60 };
+      const scale = 0.85;
+      const leftAngle = radians(limits.baseMin - limits.baseCenter);
+      const rightAngle = radians(limits.baseMax - limits.baseCenter);
+      const reach = geometry.upperArm + geometry.forearm + geometry.wristToGripperTip;
+
+      drawGrid(ctx, width, height);
+
+      ctx.fillStyle = "#eef3fb";
+      ctx.beginPath();
+      ctx.moveTo(origin.x, origin.y);
+      ctx.arc(origin.x, origin.y, reach * scale, -Math.PI / 2 + leftAngle, -Math.PI / 2 + rightAngle);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.strokeStyle = "#7b879c";
+      ctx.lineWidth = 2;
+      for (const angle of [leftAngle, rightAngle]) {
+        ctx.beginPath();
+        ctx.moveTo(origin.x, origin.y);
+        ctx.lineTo(
+          origin.x + Math.sin(angle) * reach * scale,
+          origin.y - Math.cos(angle) * reach * scale
+        );
+        ctx.stroke();
+      }
+
+      const targetPoint = {
+        x: origin.x + target.y * scale,
+        y: origin.y - target.x * scale,
+      };
+      const clampedAngle = clamp(ik.baseMath, limits.baseMin - limits.baseCenter, limits.baseMax - limits.baseCenter);
+      const armEnd = {
+        x: origin.x + Math.sin(radians(clampedAngle)) * ik.horizontal * scale,
+        y: origin.y - Math.cos(radians(clampedAngle)) * ik.horizontal * scale,
+      };
+
+      ctx.strokeStyle = "#2f80ed";
+      ctx.lineWidth = 8;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(origin.x, origin.y);
+      ctx.lineTo(armEnd.x, armEnd.y);
+      ctx.stroke();
+
+      ctx.strokeStyle = ik.baseLimit ? "#eb5757" : "#27ae60";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(targetPoint.x, targetPoint.y, 10, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.fillStyle = "#172033";
+      ctx.font = "13px Arial";
+      ctx.fillText("base", origin.x + 10, origin.y + 18);
+      ctx.fillText("target Y", targetPoint.x + 12, targetPoint.y - 12);
+      ctx.fillText("60 deg left/right sweep", 22, 28);
+    }
+
+    function drawJoint(ctx, x, y, label) {
+      ctx.beginPath();
+      ctx.arc(x, y, 7, 0, Math.PI * 2);
+      ctx.fillStyle = "#ffffff";
+      ctx.fill();
+      ctx.strokeStyle = "#172033";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+      ctx.fillStyle = "#172033";
+      ctx.font = "13px Arial";
+      ctx.fillText(label, x + 10, y - 10);
+    }
+
+    function drawSideView(target, ik) {
+      const ctx = sideCtx;
+      const width = sideCanvas.width;
+      const height = sideCanvas.height;
+      const origin = { x: 80, y: height - 48 };
+      const scale = 0.85;
+      const lower = geometry.forearm + geometry.wristToGripperTip;
+
+      drawGrid(ctx, width, height);
+
+      ctx.strokeStyle = "#7b879c";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(40, origin.y);
+      ctx.lineTo(width - 35, origin.y);
+      ctx.stroke();
+
+      const shoulder = {
+        x: origin.x,
+        y: origin.y - geometry.shoulderHeight * scale,
+      };
+      const elbow = {
+        x: shoulder.x + Math.cos(ik.shoulderAngle) * geometry.upperArm * scale,
+        y: shoulder.y - Math.sin(ik.shoulderAngle) * geometry.upperArm * scale,
+      };
+      const tip = {
+        x: elbow.x + Math.cos(ik.shoulderAngle - ik.elbowAngle) * lower * scale,
+        y: elbow.y - Math.sin(ik.shoulderAngle - ik.elbowAngle) * lower * scale,
+      };
+      const targetPoint = {
+        x: origin.x + ik.horizontal * scale,
+        y: origin.y - target.z * scale,
+      };
+
+      ctx.strokeStyle = "#2f80ed";
+      ctx.lineWidth = 10;
+      ctx.lineCap = "round";
+      ctx.beginPath();
+      ctx.moveTo(shoulder.x, shoulder.y);
+      ctx.lineTo(elbow.x, elbow.y);
+      ctx.lineTo(tip.x, tip.y);
+      ctx.stroke();
+
+      ctx.strokeStyle = ik.shoulderLimit || ik.elbowLimit ? "#eb5757" : "#27ae60";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(targetPoint.x, targetPoint.y, 10, 0, Math.PI * 2);
+      ctx.stroke();
+
+      drawJoint(ctx, shoulder.x, shoulder.y, "shoulder");
+      drawJoint(ctx, elbow.x, elbow.y, "elbow");
+      drawJoint(ctx, tip.x, tip.y, "tip");
+
+      ctx.fillStyle = "#172033";
+      ctx.font = "13px Arial";
+      ctx.fillText("X forward", width - 95, origin.y - 10);
+      ctx.fillText("Z up", origin.x + 12, 36);
+    }
+
+    function marker(flag) {
+      return flag ? " LIMIT" : "";
+    }
+
+    function render(time) {
+      if (!running) {
+        requestAnimationFrame(render);
+        return;
+      }
+
+      const t = time / 1000;
+      const target = {
+        x: cartesianHome.x + Math.sin(t * 0.55) * 34,
+        y: Math.sin(t * 0.8) * 175,
+        z: cartesianHome.z + Math.sin(t * 0.7) * 44,
+      };
+      const maxY = Math.tan(radians(60)) * Math.max(1, target.x);
+      target.y = clamp(target.y, -maxY, maxY);
+
+      const ik = solveIk(target);
+      drawTopView(target, ik);
+      drawSideView(target, ik);
+
+      readout.textContent =
+        `target xyz: x=${target.x.toFixed(1)}mm y=${target.y.toFixed(1)}mm z=${target.z.toFixed(1)}mm\n` +
+        `base servo=${ik.baseServo}${marker(ik.baseLimit)}   shoulder servo=${ik.shoulderServo}${marker(ik.shoulderLimit)}   elbow servo=${ik.elbowServo}${marker(ik.elbowLimit)}\n` +
+        `base sweep: ${limits.baseMin}-${limits.baseMax} degrees, centered at ${limits.baseCenter}\n` +
+        `links: shoulder height=${geometry.shoulderHeight}mm, upper=${geometry.upperArm}mm, forearm+gripper=${geometry.forearm + geometry.wristToGripperTip}mm`;
+
+      requestAnimationFrame(render);
+    }
+
+    requestAnimationFrame(render);
+  </script>
+</body>
+</html>
