@@ -1,18 +1,18 @@
 from __future__ import annotations
 
 import time
-from dataclasses import replace
 
 import pygame
 
 from arm_controller import ArmPosition, RoboticArmController
-from config import ANGLE_LIMITS, HOME_POSITION
+from config import ANGLE_LIMITS, CARTESIAN_HOME, HOME_POSITION
+from kinematics import CartesianPosition, cartesian_to_arm_position
 
 
 DEADZONE = 0.25
 LOOP_SECONDS = 0.05
-DEGREES_PER_TICK = 2
 GRIPPER_STEP = 3
+MILLIMETERS_PER_TICK = 3.0
 
 
 def clamp_joint(joint: str, angle: int) -> int:
@@ -32,51 +32,54 @@ def button_pressed(joystick: pygame.joystick.Joystick, button: int) -> bool:
     return button < joystick.get_numbuttons() and joystick.get_button(button) == 1
 
 
-def move_position(position: ArmPosition, joint: str, delta: int) -> ArmPosition:
-    current = getattr(position, joint)
-    return replace(position, **{joint: clamp_joint(joint, current + delta)})
+def move_cartesian_position(
+    position: CartesianPosition,
+    dx: float,
+    dy: float,
+    dz: float,
+) -> CartesianPosition:
+    # TODO: After you give the arm dimensions, add workspace limits here so
+    # joystick input cannot ask for an unreachable or unsafe XYZ position.
+    return CartesianPosition(
+        x=position.x + dx,
+        y=position.y + dy,
+        z=position.z + dz,
+    )
 
 
 def position_from_joystick(
     joystick: pygame.joystick.Joystick,
-    position: ArmPosition,
-) -> ArmPosition:
+    cartesian_position: CartesianPosition,
+    arm_position: ArmPosition,
+) -> tuple[CartesianPosition, ArmPosition]:
     left_x = axis_value(joystick, 0)
     left_y = axis_value(joystick, 1)
-    right_x = axis_value(joystick, 2)
     right_y = axis_value(joystick, 3)
 
-    next_position = position
-    next_position = move_position(
-        next_position,
-        "base_rotation",
-        round(left_x * DEGREES_PER_TICK),
+    next_cartesian_position = move_cartesian_position(
+        cartesian_position,
+        dx=left_x * MILLIMETERS_PER_TICK,
+        dy=-left_y * MILLIMETERS_PER_TICK,
+        dz=-right_y * MILLIMETERS_PER_TICK,
     )
-    next_position = move_position(
-        next_position,
-        "base_lift",
-        round(-left_y * DEGREES_PER_TICK),
-    )
-    next_position = move_position(
-        next_position,
-        "elbow",
-        round(-right_y * DEGREES_PER_TICK),
-    )
-    next_position = move_position(
-        next_position,
-        "wrist",
-        round(right_x * DEGREES_PER_TICK),
-    )
+
+    gripper = arm_position.gripper
 
     if button_pressed(joystick, 4):
-        next_position = move_position(next_position, "gripper", -GRIPPER_STEP)
+        gripper = clamp_joint("gripper", gripper - GRIPPER_STEP)
     if button_pressed(joystick, 5):
-        next_position = move_position(next_position, "gripper", GRIPPER_STEP)
+        gripper = clamp_joint("gripper", gripper + GRIPPER_STEP)
 
     if button_pressed(joystick, 0):
-        next_position = ArmPosition(**HOME_POSITION)
+        next_cartesian_position = CartesianPosition(**CARTESIAN_HOME)
+        gripper = HOME_POSITION["gripper"]
 
-    return next_position
+    next_arm_position = cartesian_to_arm_position(
+        next_cartesian_position,
+        gripper=gripper,
+        wrist=arm_position.wrist,
+    )
+    return next_cartesian_position, next_arm_position
 
 
 def wait_for_joystick() -> pygame.joystick.Joystick:
@@ -91,30 +94,53 @@ def wait_for_joystick() -> pygame.joystick.Joystick:
     return joystick
 
 
+def log_position(cartesian_position: CartesianPosition, arm_position: ArmPosition) -> None:
+    print(
+        "XYZ -> "
+        f"x={cartesian_position.x:.1f} y={cartesian_position.y:.1f} z={cartesian_position.z:.1f} "
+        "| Angles -> "
+        f"base={arm_position.base_rotation} shoulder={arm_position.base_lift} "
+        f"elbow={arm_position.elbow} wrist={arm_position.wrist} "
+        f"gripper={arm_position.gripper}"
+    )
+
+
 def main() -> None:
     pygame.init()
     pygame.joystick.init()
 
     joystick = wait_for_joystick()
-    position = ArmPosition(**HOME_POSITION)
+    cartesian_position = CartesianPosition(**CARTESIAN_HOME)
+    position = cartesian_to_arm_position(
+        cartesian_position,
+        gripper=HOME_POSITION["gripper"],
+        wrist=HOME_POSITION["wrist"],
+    )
 
     print("Joystick control started. Press Ctrl+C to stop.")
-    print("Left stick: base rotation/lift")
-    print("Right stick: wrist/elbow")
+    print("Left stick: X/Y")
+    print("Right stick Y: Z")
     print("LB/RB: close/open gripper")
     print("A: home position")
 
     try:
         with RoboticArmController() as arm:
             arm.move_to(position)
+            log_position(cartesian_position, position)
 
             while True:
                 pygame.event.pump()
-                next_position = position_from_joystick(joystick, position)
+                next_cartesian_position, next_position = position_from_joystick(
+                    joystick,
+                    cartesian_position,
+                    position,
+                )
 
                 if next_position != position:
                     arm.move_to(next_position)
+                    cartesian_position = next_cartesian_position
                     position = next_position
+                    log_position(cartesian_position, position)
 
                 time.sleep(LOOP_SECONDS)
     except KeyboardInterrupt:

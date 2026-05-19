@@ -1,15 +1,4 @@
-#include <Wire.h>
-#include <Adafruit_PWMServoDriver.h>
 #include <Servo.h>
-
-
-
-
-Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver();
-
-const uint16_t SERVO_MIN_PULSE = 120;
-const uint16_t SERVO_MAX_PULSE = 600;
-const uint8_t SERVO_FREQUENCY = 50;
 
 const uint8_t JOINT_COUNT = 5;
 
@@ -21,21 +10,17 @@ const char* JOINT_NAMES[JOINT_COUNT] = {
   "gripper"
 };
 
-const uint8_t SERVO_CHANNELS[JOINT_COUNT] = {0, 1, 2, 3, 4};
+const uint8_t SERVO_PINS[JOINT_COUNT] = {3, 5, 6, 9, 10};
 const int ANGLE_MIN[JOINT_COUNT] = {0, 30, 20, 0, 20};
 const int ANGLE_MAX[JOINT_COUNT] = {180, 150, 160, 180, 90};
 
+Servo servos[JOINT_COUNT];
 int currentAngles[JOINT_COUNT] = {90, 90, 90, 90, 45};
 String inputLine = "";
 
-uint16_t angleToPulse(int angle) {
-  angle = constrain(angle, 0, 180);
-  return map(angle, 0, 180, SERVO_MIN_PULSE, SERVO_MAX_PULSE);
-}
-
 void writeServo(uint8_t jointIndex, int angle) {
   int safeAngle = constrain(angle, ANGLE_MIN[jointIndex], ANGLE_MAX[jointIndex]);
-  pwm.setPWM(SERVO_CHANNELS[jointIndex], 0, angleToPulse(safeAngle));
+  servos[jointIndex].write(safeAngle);
   currentAngles[jointIndex] = safeAngle;
 }
 
@@ -113,9 +98,9 @@ void setup() {
   Serial.begin(9600);
   inputLine.reserve(64);
 
-  pwm.begin();
-  pwm.setPWMFreq(SERVO_FREQUENCY);
-  delay(10);
+  for (uint8_t i = 0; i < JOINT_COUNT; i++) {
+    servos[i].attach(SERVO_PINS[i]);
+  }
 
   for (uint8_t i = 0; i < JOINT_COUNT; i++) {
     writeServo(i, currentAngles[i]);
@@ -136,4 +121,3 @@ void loop() {
     }
   }
 }
-
