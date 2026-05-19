@@ -7,6 +7,7 @@ from arm_controller import ArmPosition
 from config import (
     ANGLE_LIMITS,
     ARM_GEOMETRY,
+    GRIPPER_LEVEL_ANGLE_DEGREES,
     HOME_POSITION,
     IK_SERVO_DIRECTIONS,
     IK_SERVO_OFFSETS,
@@ -75,11 +76,17 @@ def cartesian_to_arm_position(
     elbow = IK_SERVO_OFFSETS["elbow"] + (
         IK_SERVO_DIRECTIONS["elbow"] * math.degrees(elbow_angle)
     )
+    forearm_angle = shoulder_angle - elbow_angle
+    auto_level_wrist = IK_SERVO_OFFSETS["wrist"] + (
+        IK_SERVO_DIRECTIONS["wrist"]
+        * (GRIPPER_LEVEL_ANGLE_DEGREES - math.degrees(forearm_angle))
+    )
+    wrist_angle = wrist if wrist is not None else round(auto_level_wrist)
 
     return ArmPosition(
         base_rotation=clamp_joint("base_rotation", round(base_rotation)),
         base_lift=clamp_joint("base_lift", round(base_lift)),
         elbow=clamp_joint("elbow", round(elbow)),
-        wrist=clamp_joint("wrist", wrist if wrist is not None else HOME_POSITION["wrist"]),
+        wrist=clamp_joint("wrist", wrist_angle),
         gripper=clamp_joint("gripper", gripper),
     )

@@ -115,7 +115,6 @@ def position_from_joystick(
     next_arm_position = cartesian_to_arm_position(
         next_cartesian_position,
         gripper=gripper,
-        wrist=arm_position.wrist,
     )
     return next_cartesian_position, next_arm_position
 
@@ -176,7 +175,6 @@ def main() -> None:
     position = cartesian_to_arm_position(
         cartesian_position,
         gripper=HOME_POSITION["gripper"],
-        wrist=HOME_POSITION["wrist"],
     )
 
     print("Joystick control started. Press Ctrl+C to stop.")

@@ -132,6 +132,9 @@
       baseLiftDirection: -1,
       elbowOffset: 45,
       elbowDirection: 1,
+      wristOffset: 90,
+      wristDirection: 1,
+      gripperLevelAngle: 0,
     };
 
     const cartesianHome = { x: 300, y: 0, z: 139 };
@@ -187,6 +190,10 @@
       const elbowAngle = Math.PI - Math.acos(elbowCos);
       const shoulderServo = servo.baseLiftOffset + servo.baseLiftDirection * degrees(shoulderAngle);
       const elbowServo = servo.elbowOffset + servo.elbowDirection * degrees(elbowAngle);
+      const forearmAngle = shoulderAngle - elbowAngle;
+      const wristServo = servo.wristOffset + servo.wristDirection * (
+        servo.gripperLevelAngle - degrees(forearmAngle)
+      );
 
       return {
         horizontal,
@@ -199,6 +206,7 @@
         elbowAngle,
         shoulderServo: Math.round(clamp(shoulderServo, limits.shoulderMin, limits.shoulderMax)),
         elbowServo: Math.round(clamp(elbowServo, limits.elbowMin, limits.elbowMax)),
+        wristServo: Math.round(clamp(wristServo, 0, 180)),
         baseLimit: baseServo <= limits.baseMin || baseServo >= limits.baseMax,
         shoulderLimit: shoulderServo <= limits.shoulderMin || shoulderServo >= limits.shoulderMax,
         elbowLimit: elbowServo <= limits.elbowMin || elbowServo >= limits.elbowMax,
@@ -327,6 +335,12 @@
         x: elbow.x + Math.cos(ik.shoulderAngle - ik.elbowAngle) * lower * scale,
         y: elbow.y - Math.sin(ik.shoulderAngle - ik.elbowAngle) * lower * scale,
       };
+      const cupTop = {
+        x1: tip.x - 18,
+        y1: tip.y - 18,
+        x2: tip.x + 18,
+        y2: tip.y - 18,
+      };
       const targetPoint = {
         x: origin.x + ik.horizontal * scale,
         y: origin.y - target.z * scale,
@@ -350,6 +364,16 @@
       drawJoint(ctx, shoulder.x, shoulder.y, "shoulder");
       drawJoint(ctx, elbow.x, elbow.y, "elbow");
       drawJoint(ctx, tip.x, tip.y, "tip");
+
+      ctx.strokeStyle = "#f2994a";
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(cupTop.x1, cupTop.y1);
+      ctx.lineTo(cupTop.x2, cupTop.y2);
+      ctx.stroke();
+      ctx.fillStyle = "#f2994a";
+      ctx.font = "13px Arial";
+      ctx.fillText("level cup/gripper", cupTop.x2 + 8, cupTop.y2 + 4);
 
       ctx.fillStyle = "#172033";
       ctx.font = "13px Arial";
@@ -382,7 +406,7 @@
 
       readout.textContent =
         `target xyz: x=${target.x.toFixed(1)}mm y=${target.y.toFixed(1)}mm z=${target.z.toFixed(1)}mm\n` +
-        `base servo=${ik.baseServo}${marker(ik.baseLimit)}   shoulder servo=${ik.shoulderServo}${marker(ik.shoulderLimit)}   elbow servo=${ik.elbowServo}${marker(ik.elbowLimit)}\n` +
+        `base servo=${ik.baseServo}${marker(ik.baseLimit)}   shoulder servo=${ik.shoulderServo}${marker(ik.shoulderLimit)}   elbow servo=${ik.elbowServo}${marker(ik.elbowLimit)}   wrist servo=${ik.wristServo}\n` +
         `base sweep: ${limits.baseMin}-${limits.baseMax} degrees, centered at ${limits.baseCenter}\n` +
         `links: shoulder height=${geometry.shoulderHeight}mm, upper=${geometry.upperArm}mm, forearm+gripper=${geometry.forearm + geometry.wristToGripperTip}mm`;
 

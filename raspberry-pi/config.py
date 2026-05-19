@@ -35,6 +35,7 @@ IK_SERVO_OFFSETS = {
     "base_rotation": 90,
     "base_lift": 120,
     "elbow": 45,
+    "wrist": 90,
 }
 
 # Change one of these to -1 if an IK-controlled joint moves opposite to what
@@ -43,7 +44,13 @@ IK_SERVO_DIRECTIONS = {
     "base_rotation": 1,
     "base_lift": -1,
     "elbow": 1,
+    "wrist": 1,
 }
+
+# Wrist angle target for carrying a cup. 0 means level with the ground.
+# Tune IK_SERVO_OFFSETS["wrist"] and IK_SERVO_DIRECTIONS["wrist"] if the cup
+# tilts while shoulder/elbow move.
+GRIPPER_LEVEL_ANGLE_DEGREES = 0
 
 # TODO: Set this to a reachable, safe starting point for your gripper tip.
 CARTESIAN_HOME = {
