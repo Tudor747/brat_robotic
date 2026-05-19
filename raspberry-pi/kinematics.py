@@ -4,7 +4,13 @@ import math
 from dataclasses import dataclass
 
 from arm_controller import ArmPosition
-from config import ANGLE_LIMITS, ARM_GEOMETRY, HOME_POSITION, IK_SERVO_OFFSETS
+from config import (
+    ANGLE_LIMITS,
+    ARM_GEOMETRY,
+    HOME_POSITION,
+    IK_SERVO_DIRECTIONS,
+    IK_SERVO_OFFSETS,
+)
 
 
 @dataclass(frozen=True)
@@ -48,8 +54,9 @@ def cartesian_to_arm_position(
     max_reach = upper_arm + effective_forearm - 1.0
     safe_reach = clamp(reach, min_reach, max_reach)
 
-    base_rotation = math.degrees(math.atan2(target.y, target.x))
-    base_rotation += IK_SERVO_OFFSETS["base_rotation"]
+    base_rotation = IK_SERVO_OFFSETS["base_rotation"] + (
+        IK_SERVO_DIRECTIONS["base_rotation"] * math.degrees(math.atan2(target.y, target.x))
+    )
 
     shoulder_to_target = math.atan2(vertical_distance, horizontal_distance)
     shoulder_cosine = (
@@ -62,8 +69,12 @@ def cartesian_to_arm_position(
     ) / (2 * upper_arm * effective_forearm)
     elbow_angle = math.pi - math.acos(clamp(elbow_cosine, -1.0, 1.0))
 
-    base_lift = IK_SERVO_OFFSETS["base_lift"] - math.degrees(shoulder_angle)
-    elbow = IK_SERVO_OFFSETS["elbow"] + math.degrees(elbow_angle)
+    base_lift = IK_SERVO_OFFSETS["base_lift"] + (
+        IK_SERVO_DIRECTIONS["base_lift"] * math.degrees(shoulder_angle)
+    )
+    elbow = IK_SERVO_OFFSETS["elbow"] + (
+        IK_SERVO_DIRECTIONS["elbow"] * math.degrees(elbow_angle)
+    )
 
     return ArmPosition(
         base_rotation=clamp_joint("base_rotation", round(base_rotation)),

@@ -33,8 +33,16 @@ ARM_GEOMETRY = {
 # These convert math angles into your physical servo angles.
 IK_SERVO_OFFSETS = {
     "base_rotation": 90,
-    "base_lift": 90,
-    "elbow": 90,
+    "base_lift": 120,
+    "elbow": 45,
+}
+
+# Change one of these to -1 if an IK-controlled joint moves opposite to what
+# the XYZ target needs. Keep gripper tuning separate; LB/RB still control it.
+IK_SERVO_DIRECTIONS = {
+    "base_rotation": 1,
+    "base_lift": -1,
+    "elbow": 1,
 }
 
 # TODO: Set this to a reachable, safe starting point for your gripper tip.
