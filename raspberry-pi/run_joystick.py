@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import time
 
 import pygame
@@ -26,6 +27,10 @@ def clamp_joint(joint: str, angle: int) -> int:
     return max(minimum, min(maximum, angle))
 
 
+def clamp(value: float, minimum: float, maximum: float) -> float:
+    return max(minimum, min(maximum, value))
+
+
 def axis_value(joystick: pygame.joystick.Joystick, axis: int) -> float:
     if axis >= joystick.get_numaxes():
         return 0.0
@@ -44,12 +49,23 @@ def move_cartesian_position(
     dy: float,
     dz: float,
 ) -> CartesianPosition:
-    # TODO: After you give the arm dimensions, add workspace limits here so
-    # joystick input cannot ask for an unreachable or unsafe XYZ position.
+    x = max(1.0, position.x + dx)
+    y = position.y + dy
+    z = position.z + dz
+
+    base_min, base_max = ANGLE_LIMITS["base_rotation"]
+    base_center = HOME_POSITION["base_rotation"]
+    left_sweep = abs(base_min - base_center)
+    right_sweep = abs(base_max - base_center)
+    max_sweep = min(left_sweep, right_sweep)
+    max_abs_y = math.tan(math.radians(max_sweep)) * x
+
+    # Keep the requested XY target inside the base's mechanical sweep.
+    # With your CAD slot this is about 60 degrees left and 60 degrees right.
     return CartesianPosition(
-        x=position.x + dx,
-        y=position.y + dy,
-        z=position.z + dz,
+        x=x,
+        y=clamp(y, -max_abs_y, max_abs_y),
+        z=z,
     )
 
 

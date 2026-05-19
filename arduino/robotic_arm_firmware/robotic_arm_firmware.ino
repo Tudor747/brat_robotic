@@ -11,8 +11,8 @@ const char* JOINT_NAMES[JOINT_COUNT] = {
 };
 
 const uint8_t SERVO_PINS[JOINT_COUNT] = {3, 5, 6, 9, 10};
-const int ANGLE_MIN[JOINT_COUNT] = {0, 30, 20, 0, 20};
-const int ANGLE_MAX[JOINT_COUNT] = {180, 150, 160, 180, 90};
+const int ANGLE_MIN[JOINT_COUNT] = {30, 30, 20, 0, 20};
+const int ANGLE_MAX[JOINT_COUNT] = {150, 150, 160, 180, 90};
 
 Servo servos[JOINT_COUNT];
 int currentAngles[JOINT_COUNT] = {90, 90, 90, 90, 45};

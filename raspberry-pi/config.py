@@ -5,7 +5,7 @@ SERIAL_TIMEOUT_SECONDS = 2
 JOINT_ORDER = ("base_rotation", "base_lift", "elbow", "wrist", "gripper")
 
 ANGLE_LIMITS = {
-    "base_rotation": (0, 180),
+    "base_rotation": (30, 150),
     "base_lift": (30, 150),
     "elbow": (20, 160),
     "wrist": (0, 180),
