@@ -39,7 +39,25 @@ IK_SERVO_OFFSETS = {
 
 # TODO: Set this to a reachable, safe starting point for your gripper tip.
 CARTESIAN_HOME = {
-    "x": 120.0,
+    "x": 300.0,
     "y": 0.0,
-    "z": 80.0,
+    "z": 139.0,
 }
+
+# Joystick axis indexes vary by controller. Watch the startup "Axis snapshot"
+# output in run_joystick.py, then change these if your controller reports
+# right stick Y on a different axis.
+JOYSTICK_AXES = {
+    "x": 1,
+    "y": 0,
+    "z": 3,
+}
+
+# Change one of these to -1 if that XYZ direction feels backwards.
+JOYSTICK_AXIS_DIRECTIONS = {
+    "x": -1,
+    "y": 1,
+    "z": -1,
+}
+
+CARTESIAN_STEP_MM = 3.0

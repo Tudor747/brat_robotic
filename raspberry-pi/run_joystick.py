@@ -5,14 +5,20 @@ import time
 import pygame
 
 from arm_controller import ArmPosition, RoboticArmController
-from config import ANGLE_LIMITS, CARTESIAN_HOME, HOME_POSITION
+from config import (
+    ANGLE_LIMITS,
+    CARTESIAN_HOME,
+    CARTESIAN_STEP_MM,
+    HOME_POSITION,
+    JOYSTICK_AXES,
+    JOYSTICK_AXIS_DIRECTIONS,
+)
 from kinematics import CartesianPosition, cartesian_to_arm_position
 
 
 DEADZONE = 0.25
 LOOP_SECONDS = 0.05
 GRIPPER_STEP = 3
-MILLIMETERS_PER_TICK = 3.0
 
 
 def clamp_joint(joint: str, angle: int) -> int:
@@ -52,15 +58,15 @@ def position_from_joystick(
     cartesian_position: CartesianPosition,
     arm_position: ArmPosition,
 ) -> tuple[CartesianPosition, ArmPosition]:
-    left_x = axis_value(joystick, 0)
-    left_y = axis_value(joystick, 1)
-    right_y = axis_value(joystick, 3)
+    x_axis = axis_value(joystick, JOYSTICK_AXES["x"])
+    y_axis = axis_value(joystick, JOYSTICK_AXES["y"])
+    z_axis = axis_value(joystick, JOYSTICK_AXES["z"])
 
     next_cartesian_position = move_cartesian_position(
         cartesian_position,
-        dx=left_x * MILLIMETERS_PER_TICK,
-        dy=-left_y * MILLIMETERS_PER_TICK,
-        dz=-right_y * MILLIMETERS_PER_TICK,
+        dx=x_axis * JOYSTICK_AXIS_DIRECTIONS["x"] * CARTESIAN_STEP_MM,
+        dy=y_axis * JOYSTICK_AXIS_DIRECTIONS["y"] * CARTESIAN_STEP_MM,
+        dz=z_axis * JOYSTICK_AXIS_DIRECTIONS["z"] * CARTESIAN_STEP_MM,
     )
 
     gripper = arm_position.gripper
@@ -91,17 +97,40 @@ def wait_for_joystick() -> pygame.joystick.Joystick:
     joystick = pygame.joystick.Joystick(0)
     joystick.init()
     print(f"Using joystick: {joystick.get_name()}")
+    print(f"Axes: {joystick.get_numaxes()}, buttons: {joystick.get_numbuttons()}")
     return joystick
 
 
+def log_axis_snapshot(joystick: pygame.joystick.Joystick) -> None:
+    pygame.event.pump()
+    values = [
+        f"{axis}={joystick.get_axis(axis):+.2f}"
+        for axis in range(joystick.get_numaxes())
+    ]
+    print("Axis snapshot -> " + ", ".join(values))
+    print(
+        "Mapping -> "
+        f"x=axis{JOYSTICK_AXES['x']}*{JOYSTICK_AXIS_DIRECTIONS['x']}, "
+        f"y=axis{JOYSTICK_AXES['y']}*{JOYSTICK_AXIS_DIRECTIONS['y']}, "
+        f"z=axis{JOYSTICK_AXES['z']}*{JOYSTICK_AXIS_DIRECTIONS['z']}"
+    )
+
+
 def log_position(cartesian_position: CartesianPosition, arm_position: ArmPosition) -> None:
+    def format_joint(joint: str, angle: int) -> str:
+        minimum, maximum = ANGLE_LIMITS[joint]
+        marker = " LIMIT" if angle == minimum or angle == maximum else ""
+        return f"{angle}{marker}"
+
     print(
         "XYZ -> "
         f"x={cartesian_position.x:.1f} y={cartesian_position.y:.1f} z={cartesian_position.z:.1f} "
         "| Angles -> "
-        f"base={arm_position.base_rotation} shoulder={arm_position.base_lift} "
-        f"elbow={arm_position.elbow} wrist={arm_position.wrist} "
-        f"gripper={arm_position.gripper}"
+        f"base={format_joint('base_rotation', arm_position.base_rotation)} "
+        f"shoulder={format_joint('base_lift', arm_position.base_lift)} "
+        f"elbow={format_joint('elbow', arm_position.elbow)} "
+        f"wrist={format_joint('wrist', arm_position.wrist)} "
+        f"gripper={format_joint('gripper', arm_position.gripper)}"
     )
 
 
@@ -110,6 +139,7 @@ def main() -> None:
     pygame.joystick.init()
 
     joystick = wait_for_joystick()
+    log_axis_snapshot(joystick)
     cartesian_position = CartesianPosition(**CARTESIAN_HOME)
     position = cartesian_to_arm_position(
         cartesian_position,
@@ -118,8 +148,7 @@ def main() -> None:
     )
 
     print("Joystick control started. Press Ctrl+C to stop.")
-    print("Left stick: X/Y")
-    print("Right stick Y: Z")
+    print("Configured joystick axes control X/Y/Z")
     print("LB/RB: close/open gripper")
     print("A: home position")
 
