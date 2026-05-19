@@ -23,9 +23,10 @@ HOME_POSITION = {
 # TODO: Replace these with your real arm measurements before using XYZ control.
 # Units are millimeters. Measure from pivot center to pivot center.
 ARM_GEOMETRY = {
-    "shoulder_height": 60.0,
-    "upper_arm_length": 100.0,
-    "forearm_length": 100.0,
+    "shoulder_height": 139,
+    "upper_arm_length": 120,
+    "forearm_length": 120.0,
+    "wrist_to_gripper_tip": 107.0
 }
 
 # TODO: Tune these after you test one joint at a time.
