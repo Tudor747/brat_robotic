@@ -39,7 +39,7 @@ class RoboticArmController:
             timeout=self.timeout_seconds,
         )
         time.sleep(2)
-        self._drain_startup_messages()
+        self._wait_for_startup()
 
     def close(self) -> None:
         if self.serial_connection and self.serial_connection.is_open:
@@ -54,7 +54,7 @@ class RoboticArmController:
 
         assert self.serial_connection is not None
         self.serial_connection.write(command.encode("ascii"))
-        response = self.serial_connection.readline().decode("ascii", errors="replace").strip()
+        response = self._read_command_response()
 
         if response != "OK":
             raise RuntimeError(f"Arduino rejected command: {response or 'no response'}")
@@ -75,11 +75,36 @@ class RoboticArmController:
         if not self.serial_connection or not self.serial_connection.is_open:
             raise RuntimeError("Controller is not connected to the Arduino")
 
-    def _drain_startup_messages(self) -> None:
+    def _read_line(self) -> str:
         assert self.serial_connection is not None
+        return self.serial_connection.readline().decode("ascii", errors="replace").strip()
 
-        while self.serial_connection.in_waiting:
-            self.serial_connection.readline()
+    def _read_command_response(self) -> str:
+        deadline = time.monotonic() + self.timeout_seconds
+
+        while time.monotonic() < deadline:
+            response = self._read_line()
+
+            if not response or response.startswith("READY"):
+                continue
+
+            return response
+
+        return ""
+
+    def _wait_for_startup(self) -> None:
+        assert self.serial_connection is not None
+        deadline = time.monotonic() + self.timeout_seconds
+
+        while time.monotonic() < deadline:
+            if self.serial_connection.in_waiting == 0:
+                time.sleep(0.05)
+                continue
+
+            line = self._read_line()
+
+            if line.startswith("READY"):
+                return
 
     def __enter__(self) -> "RoboticArmController":
         self.connect()

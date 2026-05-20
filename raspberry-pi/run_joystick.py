@@ -11,6 +11,7 @@ from config import ANGLE_LIMITS, HOME_POSITION
 
 DEADZONE = 0.25
 LOOP_SECONDS = 0.05
+BASE_DEGREES_PER_TICK = 8
 DEGREES_PER_TICK = 2
 GRIPPER_STEP = 3
 
@@ -55,7 +56,7 @@ def position_from_joystick(
     next_position = move_position(
         next_position,
         "base_rotation",
-        round(left_x * DEGREES_PER_TICK),
+        round(left_x * BASE_DEGREES_PER_TICK),
     )
     next_position = move_position(
         next_position,
