@@ -113,6 +113,7 @@
       upperArm: 120,
       forearm: 120,
       wristToGripperTip: 107,
+      elbowDirection: -1,
     };
 
     const limits = {
@@ -165,45 +166,55 @@
 
     function solveIk(target) {
       const upper = geometry.upperArm;
-      const lower = geometry.forearm + geometry.wristToGripperTip;
       const horizontal = Math.hypot(target.x, target.y);
-      const vertical = target.z - geometry.shoulderHeight;
-      const reach = Math.hypot(horizontal, vertical);
-      const safeReach = clamp(reach, Math.abs(upper - lower) + 1, upper + lower - 1);
 
       const baseMath = degrees(Math.atan2(target.y, target.x));
       const baseServo = servo.baseRotationOffset + servo.baseRotationDirection * baseMath;
 
-      const targetAngle = Math.atan2(vertical, horizontal);
-      const shoulderCos = clamp(
-        (upper * upper + safeReach * safeReach - lower * lower) / (2 * upper * safeReach),
-        -1,
-        1
-      );
-      const elbowCos = clamp(
-        (upper * upper + lower * lower - safeReach * safeReach) / (2 * upper * lower),
-        -1,
-        1
-      );
+      const pitch = radians(servo.gripperLevelAngle);
+      let wristHorizontal = horizontal - geometry.wristToGripperTip * Math.cos(pitch);
+      let wristVertical = target.z - geometry.shoulderHeight - geometry.wristToGripperTip * Math.sin(pitch);
+      const wristReach = Math.hypot(wristHorizontal, wristVertical);
+      const safeReach = clamp(wristReach, Math.abs(upper - geometry.forearm) + 1, upper + geometry.forearm - 1);
 
-      const shoulderAngle = targetAngle + Math.acos(shoulderCos);
-      const elbowAngle = Math.PI - Math.acos(elbowCos);
+      if (wristReach > 0 && safeReach !== wristReach) {
+        const scale = safeReach / wristReach;
+        wristHorizontal *= scale;
+        wristVertical *= scale;
+      }
+
+      const elbowCos = clamp(
+        (wristHorizontal * wristHorizontal + wristVertical * wristVertical - upper * upper - geometry.forearm * geometry.forearm) / (2 * upper * geometry.forearm),
+        -1,
+        1
+      );
+      const elbowSin = geometry.elbowDirection * Math.sqrt(Math.max(0, 1 - elbowCos * elbowCos));
+
+      const elbowAngle = Math.atan2(elbowSin, elbowCos);
+      const shoulderAngle = Math.atan2(wristVertical, wristHorizontal) - Math.atan2(
+        geometry.forearm * elbowSin,
+        upper + geometry.forearm * elbowCos
+      );
       const shoulderServo = servo.baseLiftOffset + servo.baseLiftDirection * degrees(shoulderAngle);
-      const elbowServo = servo.elbowOffset + servo.elbowDirection * degrees(elbowAngle);
-      const forearmAngle = shoulderAngle - elbowAngle;
+      const elbowServo = servo.elbowOffset + servo.elbowDirection * degrees(Math.abs(elbowAngle));
+      const forearmAngle = shoulderAngle + elbowAngle;
       const wristServo = servo.wristOffset + servo.wristDirection * (
         servo.gripperLevelAngle - degrees(forearmAngle)
       );
 
       return {
         horizontal,
-        vertical,
-        reach,
+        vertical: target.z - geometry.shoulderHeight,
+        reach: Math.hypot(horizontal, target.z - geometry.shoulderHeight),
+        wristHorizontal,
+        wristVertical,
+        wristReach,
         safeReach,
         baseMath,
         baseServo: Math.round(clamp(baseServo, limits.baseMin, limits.baseMax)),
         shoulderAngle,
         elbowAngle,
+        forearmAngle,
         shoulderServo: Math.round(clamp(shoulderServo, limits.shoulderMin, limits.shoulderMax)),
         elbowServo: Math.round(clamp(elbowServo, limits.elbowMin, limits.elbowMax)),
         wristServo: Math.round(clamp(wristServo, 0, 180)),
@@ -312,7 +323,6 @@
       const height = sideCanvas.height;
       const origin = { x: 80, y: height - 48 };
       const scale = 0.85;
-      const lower = geometry.forearm + geometry.wristToGripperTip;
 
       drawGrid(ctx, width, height);
 
@@ -331,9 +341,13 @@
         x: shoulder.x + Math.cos(ik.shoulderAngle) * geometry.upperArm * scale,
         y: shoulder.y - Math.sin(ik.shoulderAngle) * geometry.upperArm * scale,
       };
+      const wrist = {
+        x: elbow.x + Math.cos(ik.forearmAngle) * geometry.forearm * scale,
+        y: elbow.y - Math.sin(ik.forearmAngle) * geometry.forearm * scale,
+      };
       const tip = {
-        x: elbow.x + Math.cos(ik.shoulderAngle - ik.elbowAngle) * lower * scale,
-        y: elbow.y - Math.sin(ik.shoulderAngle - ik.elbowAngle) * lower * scale,
+        x: wrist.x + Math.cos(radians(servo.gripperLevelAngle)) * geometry.wristToGripperTip * scale,
+        y: wrist.y - Math.sin(radians(servo.gripperLevelAngle)) * geometry.wristToGripperTip * scale,
       };
       const cupTop = {
         x1: tip.x - 18,
@@ -352,6 +366,7 @@
       ctx.beginPath();
       ctx.moveTo(shoulder.x, shoulder.y);
       ctx.lineTo(elbow.x, elbow.y);
+      ctx.lineTo(wrist.x, wrist.y);
       ctx.lineTo(tip.x, tip.y);
       ctx.stroke();
 
@@ -363,6 +378,7 @@
 
       drawJoint(ctx, shoulder.x, shoulder.y, "shoulder");
       drawJoint(ctx, elbow.x, elbow.y, "elbow");
+      drawJoint(ctx, wrist.x, wrist.y, "wrist");
       drawJoint(ctx, tip.x, tip.y, "tip");
 
       ctx.strokeStyle = "#f2994a";
@@ -408,7 +424,7 @@
         `target xyz: x=${target.x.toFixed(1)}mm y=${target.y.toFixed(1)}mm z=${target.z.toFixed(1)}mm\n` +
         `base servo=${ik.baseServo}${marker(ik.baseLimit)}   shoulder servo=${ik.shoulderServo}${marker(ik.shoulderLimit)}   elbow servo=${ik.elbowServo}${marker(ik.elbowLimit)}   wrist servo=${ik.wristServo}\n` +
         `base sweep: ${limits.baseMin}-${limits.baseMax} degrees, centered at ${limits.baseCenter}\n` +
-        `links: shoulder height=${geometry.shoulderHeight}mm, upper=${geometry.upperArm}mm, forearm+gripper=${geometry.forearm + geometry.wristToGripperTip}mm`;
+        `links: shoulder height=${geometry.shoulderHeight}mm, upper=${geometry.upperArm}mm, forearm=${geometry.forearm}mm, wrist-to-tip=${geometry.wristToGripperTip}mm`;
 
       requestAnimationFrame(render);
     }

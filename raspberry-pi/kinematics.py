@@ -7,8 +7,8 @@ from arm_controller import ArmPosition
 from config import (
     ANGLE_LIMITS,
     ARM_GEOMETRY,
+    IK_ELBOW_DIRECTION,
     GRIPPER_LEVEL_ANGLE_DEGREES,
-    HOME_POSITION,
     IK_SERVO_DIRECTIONS,
     IK_SERVO_OFFSETS,
 )
@@ -39,44 +39,52 @@ def cartesian_to_arm_position(
     upper_arm = ARM_GEOMETRY["upper_arm_length"]
     forearm = ARM_GEOMETRY["forearm_length"]
     wrist_to_gripper_tip = ARM_GEOMETRY.get("wrist_to_gripper_tip", 0.0)
-    effective_forearm = forearm + wrist_to_gripper_tip
 
     horizontal_distance = math.hypot(target.x, target.y)
-    vertical_distance = target.z - shoulder_height
-    reach = math.hypot(horizontal_distance, vertical_distance)
-
-    # TODO: When you give your exact arm measurements, test this with the
-    # gripper disconnected first. If a servo moves opposite to expected,
-    # invert that servo in the conversion below instead of rewiring.
-    # This treats the wrist/gripper as pointing straight along the forearm.
-    # Later, if you want wrist angle to control gripper-tip orientation, replace
-    # effective_forearm with a wrist-aware offset before solving IK.
-    min_reach = abs(upper_arm - effective_forearm) + 1.0
-    max_reach = upper_arm + effective_forearm - 1.0
-    safe_reach = clamp(reach, min_reach, max_reach)
-
     base_rotation = IK_SERVO_OFFSETS["base_rotation"] + (
         IK_SERVO_DIRECTIONS["base_rotation"] * math.degrees(math.atan2(target.y, target.x))
     )
 
-    shoulder_to_target = math.atan2(vertical_distance, horizontal_distance)
-    shoulder_cosine = (
-        upper_arm**2 + safe_reach**2 - effective_forearm**2
-    ) / (2 * upper_arm * safe_reach)
-    shoulder_angle = shoulder_to_target + math.acos(clamp(shoulder_cosine, -1.0, 1.0))
+    gripper_pitch = math.radians(GRIPPER_LEVEL_ANGLE_DEGREES)
+    wrist_horizontal = horizontal_distance - wrist_to_gripper_tip * math.cos(gripper_pitch)
+    wrist_vertical = (
+        target.z
+        - shoulder_height
+        - wrist_to_gripper_tip * math.sin(gripper_pitch)
+    )
 
-    elbow_cosine = (
-        upper_arm**2 + effective_forearm**2 - safe_reach**2
-    ) / (2 * upper_arm * effective_forearm)
-    elbow_angle = math.pi - math.acos(clamp(elbow_cosine, -1.0, 1.0))
+    wrist_reach = math.hypot(wrist_horizontal, wrist_vertical)
+    min_reach = abs(upper_arm - forearm) + 1.0
+    max_reach = upper_arm + forearm - 1.0
+    safe_reach = clamp(wrist_reach, min_reach, max_reach)
+
+    if wrist_reach > 0 and safe_reach != wrist_reach:
+        scale = safe_reach / wrist_reach
+        wrist_horizontal *= scale
+        wrist_vertical *= scale
+
+    elbow_cosine = clamp(
+        (wrist_horizontal**2 + wrist_vertical**2 - upper_arm**2 - forearm**2)
+        / (2 * upper_arm * forearm),
+        -1.0,
+        1.0,
+    )
+    elbow_sine = IK_ELBOW_DIRECTION * math.sqrt(max(0.0, 1.0 - elbow_cosine**2))
+    elbow_relative_angle = math.atan2(elbow_sine, elbow_cosine)
+
+    shoulder_angle = math.atan2(wrist_vertical, wrist_horizontal) - math.atan2(
+        forearm * elbow_sine,
+        upper_arm + forearm * elbow_cosine,
+    )
+    elbow_bend_angle = abs(elbow_relative_angle)
+    forearm_angle = shoulder_angle + elbow_relative_angle
 
     base_lift = IK_SERVO_OFFSETS["base_lift"] + (
         IK_SERVO_DIRECTIONS["base_lift"] * math.degrees(shoulder_angle)
     )
     elbow = IK_SERVO_OFFSETS["elbow"] + (
-        IK_SERVO_DIRECTIONS["elbow"] * math.degrees(elbow_angle)
+        IK_SERVO_DIRECTIONS["elbow"] * math.degrees(elbow_bend_angle)
     )
-    forearm_angle = shoulder_angle - elbow_angle
     auto_level_wrist = IK_SERVO_OFFSETS["wrist"] + (
         IK_SERVO_DIRECTIONS["wrist"]
         * (GRIPPER_LEVEL_ANGLE_DEGREES - math.degrees(forearm_angle))

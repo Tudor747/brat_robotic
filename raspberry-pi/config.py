@@ -29,6 +29,10 @@ ARM_GEOMETRY = {
     "wrist_to_gripper_tip": 107.0
 }
 
+# Choose which side the elbow bends toward in the side-view IK solve.
+# Change this to -1 if the shoulder/elbow try to fold the wrong way.
+IK_ELBOW_DIRECTION = -1
+
 # TODO: Tune these after you test one joint at a time.
 # These convert math angles into your physical servo angles.
 IK_SERVO_OFFSETS = {
@@ -47,10 +51,10 @@ IK_SERVO_DIRECTIONS = {
     "wrist": 1,
 }
 
-# Wrist angle target for carrying a cup. 0 means level with the ground.
+# Wrist/gripper pitch target for carrying a cup. 0 means level with the ground.
 # Tune IK_SERVO_OFFSETS["wrist"] and IK_SERVO_DIRECTIONS["wrist"] if the cup
 # tilts while shoulder/elbow move.
-GRIPPER_LEVEL_ANGLE_DEGREES = 0
+GRIPPER_LEVEL_ANGLE_DEGREES = 0.0
 
 # TODO: Set this to a reachable, safe starting point for your gripper tip.
 CARTESIAN_HOME = {
