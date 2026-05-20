@@ -21,6 +21,19 @@ class CartesianPosition:
     z: float
 
 
+@dataclass(frozen=True)
+class IkSolution:
+    target: CartesianPosition
+    arm_position: ArmPosition
+    base_angle_degrees: float
+    shoulder_angle_degrees: float
+    elbow_angle_degrees: float
+    wrist_angle_degrees: float
+    requested_wrist_reach_mm: float
+    used_wrist_reach_mm: float
+    target_was_clamped: bool
+
+
 def clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
 
@@ -35,14 +48,23 @@ def cartesian_to_arm_position(
     gripper: int,
     wrist: int | None = None,
 ) -> ArmPosition:
+    return solve_ik(target, gripper=gripper, wrist=wrist).arm_position
+
+
+def solve_ik(
+    target: CartesianPosition,
+    gripper: int,
+    wrist: int | None = None,
+) -> IkSolution:
     shoulder_height = ARM_GEOMETRY["shoulder_height"]
     upper_arm = ARM_GEOMETRY["upper_arm_length"]
     forearm = ARM_GEOMETRY["forearm_length"]
     wrist_to_gripper_tip = ARM_GEOMETRY.get("wrist_to_gripper_tip", 0.0)
 
     horizontal_distance = math.hypot(target.x, target.y)
+    base_angle_degrees = math.degrees(math.atan2(target.y, target.x))
     base_rotation = IK_SERVO_OFFSETS["base_rotation"] + (
-        IK_SERVO_DIRECTIONS["base_rotation"] * math.degrees(math.atan2(target.y, target.x))
+        IK_SERVO_DIRECTIONS["base_rotation"] * base_angle_degrees
     )
 
     gripper_pitch = math.radians(GRIPPER_LEVEL_ANGLE_DEGREES)
@@ -57,8 +79,9 @@ def cartesian_to_arm_position(
     min_reach = abs(upper_arm - forearm) + 1.0
     max_reach = upper_arm + forearm - 1.0
     safe_reach = clamp(wrist_reach, min_reach, max_reach)
+    target_was_clamped = safe_reach != wrist_reach
 
-    if wrist_reach > 0 and safe_reach != wrist_reach:
+    if wrist_reach > 0 and target_was_clamped:
         scale = safe_reach / wrist_reach
         wrist_horizontal *= scale
         wrist_vertical *= scale
@@ -91,10 +114,22 @@ def cartesian_to_arm_position(
     )
     wrist_angle = wrist if wrist is not None else round(auto_level_wrist)
 
-    return ArmPosition(
+    arm_position = ArmPosition(
         base_rotation=clamp_joint("base_rotation", round(base_rotation)),
         base_lift=clamp_joint("base_lift", round(base_lift)),
         elbow=clamp_joint("elbow", round(elbow)),
         wrist=clamp_joint("wrist", wrist_angle),
         gripper=clamp_joint("gripper", gripper),
+    )
+
+    return IkSolution(
+        target=target,
+        arm_position=arm_position,
+        base_angle_degrees=base_angle_degrees,
+        shoulder_angle_degrees=math.degrees(shoulder_angle),
+        elbow_angle_degrees=math.degrees(elbow_bend_angle),
+        wrist_angle_degrees=auto_level_wrist,
+        requested_wrist_reach_mm=wrist_reach,
+        used_wrist_reach_mm=safe_reach,
+        target_was_clamped=target_was_clamped,
     )

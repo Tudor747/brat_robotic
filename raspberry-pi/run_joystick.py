@@ -14,22 +14,13 @@ from config import (
     JOYSTICK_AXES,
     JOYSTICK_AXIS_DIRECTIONS,
 )
-from kinematics import CartesianPosition, cartesian_to_arm_position
+from kinematics import CartesianPosition, cartesian_to_arm_position, clamp, clamp_joint
 
 
 DEADZONE = 0.25
 LOOP_SECONDS = 0.05
 GRIPPER_STEP = 3
 HOME_STEP_MM = 6.0
-
-
-def clamp_joint(joint: str, angle: int) -> int:
-    minimum, maximum = ANGLE_LIMITS[joint]
-    return max(minimum, min(maximum, angle))
-
-
-def clamp(value: float, minimum: float, maximum: float) -> float:
-    return max(minimum, min(maximum, value))
 
 
 def axis_value(joystick: pygame.joystick.Joystick, axis: int) -> float:
