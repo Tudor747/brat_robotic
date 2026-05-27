@@ -7,9 +7,9 @@ JOINT_ORDER = ("base_rotation", "base_lift", "elbow", "wrist", "gripper")
 ANGLE_LIMITS = {
     "base_rotation": (30, 150),
     "base_lift": (30, 150),
-    "elbow": (20, 160),
+    "elbow": (20, 160),+
     "wrist": (0, 180),
-    "gripper": (20, 87),
+    "gripper": (0, 87),
 }
 
 HOME_POSITION = {
@@ -17,10 +17,11 @@ HOME_POSITION = {
     "base_lift": 90,
     "elbow": 90,
     "wrist": 90,
-    "gripper": 87,
+    "gripper": 90,
 }
 
-# IK measurements in millimeters. Measure from pivot center to pivot center.
+# TODO: Replace these with your real arm measurements before using XYZ control.
+# Units are millimeters. Measure from pivot center to pivot center.
 ARM_GEOMETRY = {
     "shoulder_height": 139,
     "upper_arm_length": 120,
@@ -32,6 +33,7 @@ ARM_GEOMETRY = {
 # Change this to -1 if the shoulder/elbow try to fold the wrong way.
 IK_ELBOW_DIRECTION = -1
 
+# TODO: Tune these after you test one joint at a time.
 # These convert math angles into your physical servo angles.
 IK_SERVO_OFFSETS = {
     "base_rotation": 90,
@@ -54,7 +56,7 @@ IK_SERVO_DIRECTIONS = {
 # tilts while shoulder/elbow move.
 GRIPPER_LEVEL_ANGLE_DEGREES = 0.0
 
-# Reachable, safe starting point for the gripper tip.
+# TODO: Set this to a reachable, safe starting point for your gripper tip.
 CARTESIAN_HOME = {
     "x": 300.0,
     "y": 0.0,
