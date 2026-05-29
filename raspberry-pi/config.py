@@ -13,9 +13,9 @@ ANGLE_LIMITS = {
 }
 
 HOME_POSITION = {
-    "base_rotation": 90,
-    "base_lift": 90,
-    "elbow": 90,
-    "wrist": 90,
-    "gripper": 45,
+    "base_rotation": 101,
+    "base_lift": 67,
+    "elbow": 86,
+    "wrist": 96,
+    "gripper": 87,
 }
