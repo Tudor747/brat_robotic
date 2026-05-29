@@ -11,11 +11,12 @@ const char* JOINT_NAMES[JOINT_COUNT] = {
 };
 
 const uint8_t SERVO_PINS[JOINT_COUNT] = {2,3,4,5,6};
-const int ANGLE_MIN[JOINT_COUNT] = {0, 30, 20, 34, 0};
+const int ANGLE_MIN[JOINT_COUNT] = {0, 40, 20, 34, 30};
 const int ANGLE_MAX[JOINT_COUNT] = {120, 150, 160, 154, 90};
 
 Servo servos[JOINT_COUNT];
-int currentAngles[JOINT_COUNT] = {90, 90, 90, 94, 90};
+base_rotation=96, base_lift=67, elbow=86, wrist=96, gripper=87
+int currentAngles[JOINT_COUNT] = {100, 67, 86, 96, 90};
 String inputLine = "";
 
 void writeServo(uint8_t jointIndex, int angle) {
